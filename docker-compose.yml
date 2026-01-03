@@ -1,0 +1,79 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskory_backend
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_DATABASE=taskory_db
+      - DB_USERNAME=taskory_user
+      - DB_PASSWORD=password
+      - MAIL_MAILER=smtp
+      - MAIL_HOST=mailpit
+      - MAIL_PORT=1025
+      - MAIL_USERNAME=null
+      - MAIL_PASSWORD=null
+      - MAIL_ENCRYPTION=null
+    depends_on:
+      - db
+      - mailpit
+
+  nginx:
+    image: nginx:alpine
+    container_name: taskory_nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - backend
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: taskory_mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: taskory_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15
+    container_name: taskory_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: taskory_db
+      POSTGRES_USER: taskory_user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
