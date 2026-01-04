@@ -46,4 +46,36 @@ class OrganizationController extends Controller
         $this->organizationService->deleteOrganization($organization);
         return $this->success([], 'Organization deleted successfully');
     }
+
+    public function addUser(Request $request, Organization $organization)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'project_id' => 'nullable|integer' // Optional: if inviting directly to a project context
+        ]);
+
+        try {
+            $result = $this->organizationService->inviteUser($organization, $request->email, $request->input('project_id'));
+            
+            if ($result instanceof \App\Models\User) {
+                return $this->success($result, 'User added to project successfully');
+            }
+            
+            return $this->success($result, 'Invitation sent successfully');
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
+        }
+    }
+
+    public function acceptInvite(Request $request)
+    {
+        $request->validate(['token' => 'required|string']);
+
+        try {
+            $organization = $this->organizationService->acceptInvitation($request->token, auth()->user());
+            return $this->success($organization, 'Joined organization successfully');
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
+        }
+    }
 }

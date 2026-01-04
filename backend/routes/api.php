@@ -46,14 +46,23 @@ Route::middleware('auth:sanctum')->group(function () {
     // Setup route for first-time organization creation
     Route::post('/setup/organization', [\App\Http\Controllers\SetupController::class, 'createOrganization']);
 
+    Route::post('/organizations/accept-invite', [OrganizationController::class, 'acceptInvite']);
     Route::apiResource('organizations', OrganizationController::class);
+    Route::post('/organizations/{organization}/users', [OrganizationController::class, 'addUser']);
+
     Route::apiResource('projects', ProjectController::class);
+    Route::get('/projects/{project}/users', [\App\Http\Controllers\ProjectUserController::class, 'index']);
+    Route::post('/projects/{project}/users', [ProjectController::class, 'addUser']);
+
     Route::post('/tasks/reorder', [TaskController::class, 'reorder']);
     Route::apiResource('tasks', TaskController::class);
     
     // Statuses & Milestones (depend on project, so usually we pass project_id via query param, but for REST standard we use resource routes)
     Route::apiResource('task-statuses', TaskStatusController::class);
     Route::apiResource('milestones', MilestoneController::class);
+
+    Route::get('/tasks/{task}/comments', [TaskController::class, 'comments']);
+    Route::post('/tasks/{task}/comments', [TaskController::class, 'storeComment']);
 
     Route::post('/comments', [CommentController::class, 'store']);
     Route::delete('/comments/{comment}', [CommentController::class, 'destroy']);
