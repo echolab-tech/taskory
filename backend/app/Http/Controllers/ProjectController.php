@@ -48,4 +48,16 @@ class ProjectController extends Controller
         $this->projectService->deleteProject($project);
         return $this->success([], 'Project deleted successfully');
     }
+
+    public function addUser(Request $request, Project $project)
+    {
+        $request->validate(['email' => 'required|email']);
+
+        try {
+            $user = $this->projectService->addUserToProject($project, $request->email);
+            return $this->success($user, 'User added to project successfully');
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
+        }
+    }
 }

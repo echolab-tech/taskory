@@ -18,7 +18,11 @@ import {
     Trash2,
     Save,
     Flag,
-    Sparkles
+    Sparkles,
+    Send,
+    Paperclip,
+    FileText,
+    MessageSquare
 } from "lucide-react";
 import api from "@/app/lib/api";
 import { Reorder, motion, AnimatePresence } from "framer-motion";
@@ -30,6 +34,15 @@ function TasksListContent() {
     const [selectedTask, setSelectedTask] = useState<any>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
+
+    // Sidebar View State
+    const [activeTab, setActiveTab] = useState<'details' | 'comments'>('details');
+    const [comments, setComments] = useState<any[]>([]);
+    const [newComment, setNewComment] = useState("");
+    const [attachments, setAttachments] = useState<any[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const [autoSaving, setAutoSaving] = useState(false);
+    const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Form state for creating/editing
     const [formData, setFormData] = useState({
@@ -76,14 +89,14 @@ function TasksListContent() {
 
     const fetchMeta = async () => {
         try {
-            const [statusRes, milestoneRes, orgRes] = await Promise.all([
+            const [statusRes, milestoneRes, projectUsersRes] = await Promise.all([
                 api.get(`/task-statuses?project_id=${projectId}`),
                 api.get(`/milestones?project_id=${projectId}`),
-                api.get(`/organizations/${orgId}`)
+                api.get(`/projects/${projectId}/users`)
             ]);
             setStatuses(statusRes.data.data || []);
             setMilestones(milestoneRes.data.data || []);
-            setUsers(orgRes.data.data.users || []);
+            setUsers(projectUsersRes.data.data || []);
         } catch (err) {
             console.error("Error fetching meta", err);
         }
@@ -102,6 +115,80 @@ function TasksListContent() {
         }
     };
 
+    const fetchActivities = async (taskId: string) => {
+        try {
+            // endpoint switched to /comments as /activities was not found
+            // This should return the list of comments/interactions for the task
+            const res = await api.get(`/tasks/${taskId}/comments`);
+            setComments(res.data.data || []);
+        } catch (err) {
+            console.error("Error fetching comments", err);
+            setComments([]);
+        }
+    };
+
+    const updateField = (field: string, value: any) => {
+        setFormData(prev => {
+            const newData = { ...prev, [field]: value };
+
+            // Trigger Auto-Save if editing existing task
+            if (!isCreating && selectedTask) {
+                setAutoSaving(true);
+                if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+
+                autoSaveTimeoutRef.current = setTimeout(async () => {
+                    try {
+                        await api.put(`/tasks/${selectedTask.id}`, newData);
+                        fetchTasks(); // Refresh list silently
+                        setAutoSaving(false);
+                        fetchActivities(selectedTask.id); // Refresh activity feed
+                    } catch (err) {
+                        console.error("Auto-save failed", err);
+                        setAutoSaving(false);
+                    }
+                }, 1000);
+            }
+
+            return newData;
+        });
+    };
+
+    const handlePostComment = async () => {
+        if (!newComment.trim() && attachments.length === 0) return;
+
+        try {
+            const data = new FormData();
+            data.append('content', newComment);
+            attachments.forEach((file) => {
+                data.append('files[]', file); // Use 'files[]' convention for arrays in PHP/Laravel backends often
+            });
+
+            // Or if strict JSON is expected for components without files, handle accordingly.
+            // But FormData is safest for files.
+
+            setIsUploading(true);
+            await api.post(`/tasks/${selectedTask.id}/comments`, data, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            setNewComment("");
+            setAttachments([]);
+            fetchActivities(selectedTask.id);
+        } catch (err) {
+            console.error("Error posting comment", err);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            // Convert FileList to Array and append
+            const newFiles = Array.from(e.target.files);
+            setAttachments(prev => [...prev, ...newFiles]);
+        }
+    };
+
     const openTaskDetails = (task: any) => {
         setSelectedTask(task);
         setFormData({
@@ -114,6 +201,16 @@ function TasksListContent() {
             start_date: task.start_date || "",
             priority: task.priority || "medium"
         });
+
+        // Reset sidebar view state
+        setActiveTab('details');
+        setComments([]);
+        setAttachments([]);
+        setNewComment("");
+
+        // Fetch user activities/comments
+        fetchActivities(task.id);
+
         setIsCreating(false);
         setIsSidebarOpen(true);
     };
@@ -130,6 +227,9 @@ function TasksListContent() {
             start_date: "",
             priority: "medium"
         });
+        setActiveTab('details');
+        setComments([]);
+        setAttachments([]);
         setIsCreating(true);
         setIsSidebarOpen(true);
     };
@@ -146,11 +246,18 @@ function TasksListContent() {
         try {
             if (isCreating) {
                 await api.post('/tasks', { ...formData, project_id: projectId });
+                fetchTasks();
+                handleCloseSidebar();
             } else {
+                // Manual save trigger (if needed, though auto-save handles it)
                 await api.put(`/tasks/${selectedTask.id}`, formData);
+                fetchTasks();
+                // Don't close sidebar on manual save in edit mode, just notify? 
+                // Actually, if this is called from the "Save" button which is now removed in Edit mode,
+                // this block might technically be unreachable for Edit mode unless we re-add a button.
+                // But let's keep it safe.
+                setAutoSaving(false);
             }
-            fetchTasks();
-            handleCloseSidebar();
         } catch (err) {
             console.error("Error saving task", err);
         }
@@ -289,10 +396,18 @@ function TasksListContent() {
                             className="fixed top-0 right-0 h-screen w-full max-w-xl bg-white shadow-2xl z-[101] border-l border-slate-200 flex flex-col"
                         >
                             {/* Panel Header */}
-                            <div className="h-20 flex items-center justify-between px-8 bg-slate-50 border-b border-slate-200">
-                                <h3 className="font-black text-slate-900 tracking-widest text-sm">
-                                    {isCreating ? "Initialize New Task" : "Task Intelligence"}
-                                </h3>
+                            <div className="h-20 flex items-center justify-between px-8 bg-slate-50 border-b border-slate-200 flex-shrink-0">
+                                <div className="flex items-center gap-4">
+                                    <h3 className="font-black text-slate-900 tracking-widest text-sm">
+                                        {isCreating ? "Initialize New Task" : "Task Quick View"}
+                                    </h3>
+                                    {!isCreating && (
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-colors ${autoSaving ? "text-blue-600 bg-blue-50" : "text-emerald-600 bg-emerald-50"
+                                            }`}>
+                                            {autoSaving ? "Saving..." : "All Changes Saved"}
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="flex items-center gap-2">
                                     {!isCreating && (
                                         <button
@@ -311,148 +426,224 @@ function TasksListContent() {
                                 </div>
                             </div>
 
-                            {/* Panel Form */}
-                            <form onSubmit={handleSaveTask} className="flex-1 overflow-y-auto p-10 space-y-10">
-                                {/* Title Input */}
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] flex items-center gap-2">
-                                        <AlignLeft size={14} />
-                                        Task Designation
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        className="w-full text-2xl font-black text-slate-950 placeholder:text-slate-200 border-none focus:ring-0 p-0"
-                                        placeholder="Define the task objective..."
-                                        value={formData.title}
-                                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    />
-                                </div>
+                            {/* Tabs (Only in Edit Mode) */}
+                            {/* Tabs Removed - Unified View */}
 
-                                {/* Main Properties Grid */}
-                                <div className="grid grid-cols-2 gap-10">
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                                            <Tag size={14} />
-                                            Lifecycle Status
-                                        </label>
-                                        <select
-                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-slate-900 transition-all appearance-none"
-                                            value={formData.status_id}
-                                            onChange={(e) => setFormData({ ...formData, status_id: e.target.value })}
-                                        >
-                                            {statuses.map(s => (
-                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                            <option value="">No Status</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] flex items-center gap-2">
-                                            <TrendingUp size={14} />
-                                            Priority Level
-                                        </label>
-                                        <select
-                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-slate-900 transition-all appearance-none"
-                                            value={formData.priority}
-                                            onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                                        >
-                                            <option value="low">Low Priority</option>
-                                            <option value="medium">Medium Priority</option>
-                                            <option value="high">High Priority</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] flex items-center gap-2">
-                                            <UserPlus size={14} />
-                                            Operational Lead
-                                        </label>
-                                        <select
-                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-slate-900 transition-all appearance-none"
-                                            value={formData.assignee_id}
-                                            onChange={(e) => setFormData({ ...formData, assignee_id: e.target.value })}
-                                        >
-                                            <option value="">Unassigned</option>
-                                            {users.map(u => (
-                                                <option key={u.id} value={u.id}>{u.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] flex items-center gap-2">
-                                            <CalendarIcon size={14} />
-                                            Start Date
-                                        </label>
+                            {/* Panel Content - Scrollable */}
+                            <div className="flex-1 overflow-y-auto bg-white">
+                                <div className="p-8 space-y-6">
+                                    {/* Auto-Save Form - Compact Layout */}
+                                    <div className="space-y-2">
                                         <input
-                                            type="date"
-                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-slate-900 transition-all ring-0"
-                                            value={formData.start_date}
-                                            onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                                            type="text"
+                                            required
+                                            className="w-full text-lg font-black text-slate-900 placeholder:text-slate-200 border-none focus:ring-0 p-0 bg-transparent"
+                                            placeholder="Task Title..."
+                                            value={formData.title}
+                                            onChange={(e) => updateField('title', e.target.value)}
                                         />
                                     </div>
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] flex items-center gap-2">
-                                            <CalendarIcon size={14} />
-                                            Due Date
+
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Tag size={12} /> Status
+                                            </label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all appearance-none"
+                                                value={formData.status_id}
+                                                onChange={(e) => updateField('status_id', e.target.value)}
+                                            >
+                                                {statuses.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                                <option value="">No Status</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <TrendingUp size={12} /> Priority
+                                            </label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all appearance-none"
+                                                value={formData.priority}
+                                                onChange={(e) => updateField('priority', e.target.value)}
+                                            >
+                                                <option value="low">Low</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="high">High</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <UserPlus size={12} /> Assignee
+                                            </label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all appearance-none"
+                                                value={formData.assignee_id}
+                                                onChange={(e) => updateField('assignee_id', e.target.value)}
+                                            >
+                                                <option value="">Unassigned</option>
+                                                {users.map(u => (
+                                                    <option key={u.id} value={u.id}>{u.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Flag size={12} /> Milestone
+                                            </label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all appearance-none"
+                                                value={formData.milestone_id}
+                                                onChange={(e) => updateField('milestone_id', e.target.value)}
+                                            >
+                                                <option value="">No Milestone</option>
+                                                {milestones.map(m => (
+                                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <CalendarIcon size={12} /> Start Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all ring-0"
+                                                value={formData.start_date}
+                                                onChange={(e) => updateField('start_date', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <CalendarIcon size={12} /> Due Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all ring-0"
+                                                value={formData.due_date}
+                                                onChange={(e) => updateField('due_date', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 pt-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <AlignLeft size={12} /> Description
                                         </label>
-                                        <input
-                                            type="date"
-                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-slate-900 transition-all ring-0"
-                                            value={formData.due_date}
-                                            onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                                        <textarea
+                                            rows={12}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-medium text-slate-700 outline-none focus:border-blue-500 transition-all resize-none leading-relaxed"
+                                            placeholder="Add a more detailed description..."
+                                            value={formData.description}
+                                            onChange={(e) => updateField('description', e.target.value)}
                                         />
                                     </div>
-                                    <div className="col-span-2 space-y-4">
-                                        <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] flex items-center gap-2">
-                                            <Flag size={14} />
-                                            Project Milestone
-                                        </label>
-                                        <select
-                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-slate-900 transition-all appearance-none"
-                                            value={formData.milestone_id}
-                                            onChange={(e) => setFormData({ ...formData, milestone_id: e.target.value })}
-                                        >
-                                            <option value="">No Milestone</option>
-                                            {milestones.map(m => (
-                                                <option key={m.id} value={m.id}>{m.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
+                                    {/* Activity Timeline Section (Unified) */}
+                                    {!isCreating && (
+                                        <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                <MessageSquare size={12} />
+                                                Activity & Comments
+                                            </h4>
 
-                                {/* Description */}
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-slate-400 tracking-[0.2em] flex items-center gap-2">
-                                        <AlignLeft size={14} className="text-slate-400" />
-                                        Task Documentation
-                                    </label>
-                                    <textarea
-                                        rows={8}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-6 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 transition-all resize-none italic"
-                                        placeholder="Elaborate on the task details and specifications..."
-                                        value={formData.description}
-                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    />
-                                </div>
-                            </form>
+                                            {comments.length === 0 ? (
+                                                <p className="text-xs italic text-slate-400 text-center py-4">No activity yet</p>
+                                            ) : (
+                                                <div className="space-y-6">
+                                                    {comments.map((activity) => (
+                                                        <div key={activity.id} className="flex gap-3 group">
+                                                            <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">
+                                                                {activity.user?.name?.substring(0, 1).toUpperCase() || "S"}
+                                                            </div>
+                                                            <div className="space-y-1 flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[11px] font-bold text-slate-900">{activity.user?.name || "System"}</span>
+                                                                    <span className="text-[9px] font-medium text-slate-400">{activity.created_at ? new Date(activity.created_at).toLocaleString() : "Just now"}</span>
+                                                                </div>
 
-                            {/* Panel Footer */}
-                            <div className="p-8 bg-white border-t border-slate-100 flex gap-4">
-                                <button
-                                    type="button"
-                                    onClick={handleCloseSidebar}
-                                    className="flex-1 px-6 py-4 bg-slate-50 text-slate-600 rounded-2xl text-xs font-black tracking-widest hover:bg-slate-100 transition-all"
-                                >
-                                    Discard
-                                </button>
-                                <button
-                                    onClick={handleSaveTask}
-                                    className="flex-[2] px-6 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black tracking-[0.2em] hover:bg-black shadow-xl shadow-slate-900/20 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
-                                >
-                                    <Save size={16} />
-                                    {isCreating ? "Add Task" : "Save Changes"}
-                                </button>
+                                                                {activity.content && (
+                                                                    <div className={`text-[11px] leading-relaxed ${activity.type === 'activity' ? 'text-slate-500 italic' : 'text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-50'}`}>
+                                                                        {activity.content}
+                                                                    </div>
+                                                                )}
+
+                                                                {activity.file_url && (
+                                                                    <a href={activity.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-100 rounded-lg hover:border-blue-300 w-fit max-w-full">
+                                                                        <FileText size={12} className="text-blue-500" />
+                                                                        <span className="text-[10px] font-bold text-slate-700 truncate max-w-[150px]">{activity.file_name}</span>
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
+
+                            {/* Comment Input Footer (Fixed at Bottom for Edit Mode) */}
+                            {!isCreating && (
+                                <div className="p-4 bg-white border-t border-slate-100 flex-shrink-0 z-10">
+                                    {attachments.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            {attachments.map((file, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-2 py-1 rounded text-[10px] font-bold border border-blue-100 animate-in slide-in-from-bottom-2">
+                                                    <Paperclip size={10} />
+                                                    <span className="max-w-[100px] truncate">{file.name}</span>
+                                                    <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="hover:text-rose-500"><X size={10} /></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/10 focus-within:border-blue-400 transition-all">
+                                        <label className="p-1.5 text-slate-400 hover:text-blue-600 cursor-pointer flex-shrink-0">
+                                            <input type="file" className="hidden" multiple onChange={handleFileUpload} />
+                                            <Paperclip size={16} />
+                                        </label>
+                                        <textarea
+                                            className="flex-1 bg-transparent border-none p-1.5 text-xs text-slate-700 focus:ring-0 resize-none max-h-24 min-h-[36px]"
+                                            placeholder="Type a comment..."
+                                            rows={1}
+                                            value={newComment}
+                                            onChange={(e) => {
+                                                setNewComment(e.target.value);
+                                                e.target.style.height = 'auto';
+                                                e.target.style.height = e.target.scrollHeight + 'px';
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePostComment(); }
+                                            }}
+                                        />
+                                        <button onClick={handlePostComment} disabled={!newComment.trim() && attachments.length === 0} className="p-1.5 bg-slate-900 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex-shrink-0">
+                                            {isUploading ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={14} />}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Panel Footer (Only for Create Mode) */}
+                            {isCreating && (
+                                <div className="p-8 bg-white border-t border-slate-100 flex gap-4 flex-shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={handleCloseSidebar}
+                                        className="flex-1 px-6 py-4 bg-slate-50 text-slate-600 rounded-2xl text-xs font-black tracking-widest hover:bg-slate-100 transition-all"
+                                    >
+                                        Discard
+                                    </button>
+                                    <button
+                                        onClick={handleSaveTask}
+                                        className="flex-[2] px-6 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black tracking-[0.2em] hover:bg-black shadow-xl shadow-slate-900/20 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                                    >
+                                        <Save size={16} />
+                                        Add Task
+                                    </button>
+                                </div>
+                            )}
                         </motion.div>
                     </>
                 )}

@@ -75,4 +75,26 @@ class TaskController extends Controller
         $this->taskService->reorderTasks($request->tasks);
         return $this->success([], 'Tasks reordered successfully');
     }
+    public function comments(Task $task)
+    {
+        $activities = $this->taskService->getTaskActivities($task);
+        return $this->success($activities);
+    }
+
+    public function storeComment(Request $request, Task $task)
+    {
+        $request->validate([
+            'content' => 'nullable|string',
+            'files' => 'nullable|array',
+            'files.*' => 'file|max:10240' // 10MB max per file
+        ]);
+
+        if (!$request->content && !$request->hasFile('files')) {
+            return response()->json(['message' => 'Content or files required'], 422);
+        }
+
+        $this->taskService->createComment($task, $request->all(), $request->file('files', []));
+        
+        return $this->success([], 'Comment posted successfully');
+    }
 }

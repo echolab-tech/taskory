@@ -45,4 +45,11 @@ class Project extends Model
     {
         return $this->morphMany(Attachment::class, 'attachable');
     }
+
+    public function users(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'project_user')
+                    ->withPivot('role')
+                    ->withTimestamps();
+    }
 }
