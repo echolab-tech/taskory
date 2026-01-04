@@ -56,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/tasks/reorder', [TaskController::class, 'reorder']);
     Route::apiResource('tasks', TaskController::class);
+    Route::get('/projects/{project}/activities', [App\Http\Controllers\ProjectActivityController::class, 'index']);
     
     // Statuses & Milestones (depend on project, so usually we pass project_id via query param, but for REST standard we use resource routes)
     Route::apiResource('task-statuses', TaskStatusController::class);

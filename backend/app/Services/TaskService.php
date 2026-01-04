@@ -19,7 +19,11 @@ class TaskService
             $query->where('assignee_id', $filters['assignee_id']);
         }
 
+        // Only show top-level tasks in the main list
+        $query->whereNull('parent_id');
+
         return $query->with('assignee', 'status', 'milestone', 'creator')
+                     ->withCount(['comments', 'subtasks'])
                      ->orderBy('position', 'asc')
                      ->get();
     }
@@ -40,7 +44,12 @@ class TaskService
         if (!isset($data['creator_id'])) {
             $data['creator_id'] = Auth::id();
         }
-        return Task::create($data);
+        
+        $task = Task::create($data);
+        
+        $this->logActivity($task, 'created', null, ['title' => $task->title]);
+        
+        return $task;
     }
 
     public function updateTask(Task $task, array $data)
@@ -68,6 +77,7 @@ class TaskService
             ];
         }
 
+        $assigneeChanged = false;
         if ($task->isDirty('assignee_id')) {
             $oldUser = \App\Models\User::find($original->assignee_id);
             $newUser = \App\Models\User::find($task->assignee_id);
@@ -76,6 +86,7 @@ class TaskService
                 'old' => $oldUser ? $oldUser->name : 'Unassigned',
                 'new' => $newUser ? $newUser->name : 'Unassigned'
             ];
+            $assigneeChanged = true;
         }
         
         if ($task->isDirty('due_date')) {
@@ -94,6 +105,14 @@ class TaskService
             ];
         }
 
+        if ($task->isDirty('parent_id')) {
+             $changes[] = [
+                'field' => 'Parent Task',
+                'old' => $original->parent_id,
+                'new' => $task->parent_id
+            ];
+        }
+
         $task->save();
 
         // Log formatted changes
@@ -104,6 +123,16 @@ class TaskService
                 $change['old'], 
                 $change['new']
             );
+        }
+
+        // Send Email if Assignee Changed
+        if ($assigneeChanged && $task->assignee_id) {
+            $assignee = \App\Models\User::find($task->assignee_id);
+            if ($assignee && $assignee->email) {
+                \Illuminate\Support\Facades\Mail::to($assignee->email)->send(
+                    new \App\Mail\TaskAssigned($task, Auth::user())
+                );
+            }
         }
         
         return $task;
@@ -138,7 +167,11 @@ class TaskService
         });
 
         // 2. System Activities
-        $activities = $task->activities()->with('user')->get()->map(function ($activity) {
+        $activities = $task->activities()
+            ->where('action', '!=', 'comment')
+            ->with('user')
+            ->get()
+            ->map(function ($activity) {
             // Build readable content string
             $field = str_replace('_updated', '', $activity->action);
             
@@ -196,6 +229,26 @@ class TaskService
             'user_id' => Auth::id(),
             'content' => $data['content'] ?? '',
         ]);
+        
+        // Log comment as activity so it appears in project feed
+        $this->logActivity($task, 'comment', null, ['content' => $comment->content]);
+
+        // Sending Mention Emails
+        // Regex to find @Name
+        preg_match_all('/@(\w+)/', $comment->content, $matches);
+        if (!empty($matches[1])) {
+            $mentionedNames = array_unique($matches[1]);
+            // Search users in project (or specific scope if needed)
+            $users = \App\Models\User::whereIn('name', $mentionedNames)->get(); // Simple matching by name
+            
+            foreach ($users as $user) {
+                if ($user->email && $user->id !== Auth::id()) {
+                     \Illuminate\Support\Facades\Mail::to($user->email)->send(
+                        new \App\Mail\CommentMentioned($task, $comment, Auth::user())
+                    );
+                }
+            }
+        }
 
         if (!empty($files)) {
             foreach ($files as $file) {

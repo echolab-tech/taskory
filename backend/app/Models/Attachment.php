@@ -24,6 +24,13 @@ class Attachment extends Model
         return $this->morphTo();
     }
 
+    protected $appends = ['file_url'];
+
+    public function getFileUrlAttribute()
+    {
+        return asset('storage/' . $this->file_path);
+    }
+
     /**
      * Get the user who uploaded the attachment.
      */
