@@ -8,18 +8,23 @@ import {
     User as UserIcon,
     Clock,
     MessageSquare,
-    Paperclip,
     Loader2,
-    Calendar as CalendarIcon
+    TrendingUp
 } from "lucide-react";
 import api from "@/app/lib/api";
-import { motion, AnimatePresence, Reorder } from "framer-motion";
+import { motion } from "framer-motion";
+import TaskDetailSidebar from "@/components/task/TaskDetailSidebar";
 
 export default function KanbanBoardPage() {
-    const { orgId, projectId } = useParams();
+    const { projectId } = useParams();
     const [tasks, setTasks] = useState<any[]>([]);
     const [statuses, setStatuses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Sidebar State
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [sidebarTab, setSidebarTab] = useState<'details' | 'comments' | 'subtasks'>('details');
 
     useEffect(() => {
         if (projectId) {
@@ -58,6 +63,18 @@ export default function KanbanBoardPage() {
         return tasks.filter(t => t.status_id === statusId);
     };
 
+    const openTaskDetails = (task: any, scrollToSection?: 'comments' | 'subtasks') => {
+        setSelectedTaskId(task.id);
+        setSidebarTab(scrollToSection || 'details');
+        setIsSidebarOpen(true);
+    };
+
+    const handleCloseSidebar = () => {
+        setIsSidebarOpen(false);
+        setSelectedTaskId(null);
+        fetchData();
+    };
+
     if (loading) {
         return (
             <div className="flex h-[400px] w-full items-center justify-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
@@ -92,7 +109,7 @@ export default function KanbanBoardPage() {
                         </button>
                     </div>
 
-                    {/* Column Body - Using a simple drop zone approach with motion */}
+                    {/* Column Body */}
                     <div
                         className="flex-1 bg-slate-50/50 rounded-2xl p-2 flex flex-col gap-3 border border-slate-100/50 overflow-y-auto no-scrollbar"
                         onDragOver={(e) => e.preventDefault()}
@@ -107,14 +124,15 @@ export default function KanbanBoardPage() {
                                 draggable
                                 onDragStart={(e) => e.dataTransfer.setData("taskId", task.id.toString())}
                                 layoutId={task.id.toString()}
+                                onClick={() => openTaskDetails(task)}
                                 className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-grab active:cursor-grabbing group ring-offset-2 focus:ring-2 focus:ring-blue-500"
                             >
                                 <div className="flex flex-col gap-3">
                                     {/* Priority Badge */}
                                     <div className="flex items-center justify-between">
                                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${task.priority === 'high' ? 'bg-rose-50 text-rose-500 border-rose-100' :
-                                                task.priority === 'medium' ? 'bg-amber-50 text-amber-500 border-amber-100' :
-                                                    'bg-slate-50 text-slate-500 border-slate-100'
+                                            task.priority === 'medium' ? 'bg-amber-50 text-amber-500 border-amber-100' :
+                                                'bg-slate-50 text-slate-500 border-slate-100'
                                             }`}>
                                             {task.priority || 'Medium'}
                                         </span>
@@ -126,13 +144,39 @@ export default function KanbanBoardPage() {
                                         {task.title}
                                     </h4>
 
+                                    {/* Subtask/Comment Indicators (Board Style) */}
+                                    {(task.subtasks_count > 0 || task.comments_count > 0) && (
+                                        <div className="flex items-center gap-3">
+                                            {task.subtasks_count > 0 && (
+                                                <div
+                                                    className="flex items-center gap-1 text-slate-400 hover:text-blue-600 cursor-pointer transition-colors"
+                                                    onClick={(e) => { e.stopPropagation(); openTaskDetails(task, 'subtasks'); }}
+                                                    title={`${task.subtasks_count} Subtasks`}
+                                                >
+                                                    <TrendingUp className="rotate-90" size={12} />
+                                                    <span className="text-[10px] font-bold">{task.subtasks_count}</span>
+                                                </div>
+                                            )}
+                                            {task.comments_count > 0 && (
+                                                <div
+                                                    className="flex items-center gap-1 text-slate-400 hover:text-blue-600 cursor-pointer transition-colors"
+                                                    onClick={(e) => { e.stopPropagation(); openTaskDetails(task, 'comments'); }}
+                                                    title={`${task.comments_count} Comments`}
+                                                >
+                                                    <MessageSquare size={12} />
+                                                    <span className="text-[10px] font-bold">{task.comments_count}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Metadata */}
                                     <div className="flex items-center justify-between mt-1 pt-3 border-t border-slate-50">
                                         <div className="flex items-center gap-3">
                                             {task.due_date && (
                                                 <div className={`flex items-center gap-1.5 ${new Date(task.due_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0)
-                                                        ? 'text-rose-500'
-                                                        : 'text-slate-400'
+                                                    ? 'text-rose-500'
+                                                    : 'text-slate-400'
                                                     }`}>
                                                     <Clock size={12} />
                                                     <span className="text-[10px] font-bold">
@@ -167,6 +211,15 @@ export default function KanbanBoardPage() {
                     <p className="text-sm font-medium italic">Initialize project statuses to view board.</p>
                 </div>
             )}
+
+            <TaskDetailSidebar
+                taskId={selectedTaskId}
+                projectId={projectId as string}
+                isOpen={isSidebarOpen}
+                onClose={handleCloseSidebar}
+                onUpdate={fetchData}
+                initialTab={sidebarTab}
+            />
         </div>
     );
 }

@@ -24,12 +24,23 @@ class Task extends Model
         'start_date',
         'due_date',
         'position',
-        'creator_id'
+        'creator_id',
+        'parent_id'
     ];
 
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Task::class, 'parent_id');
+    }
+
+    public function subtasks(): HasMany
+    {
+        return $this->hasMany(Task::class, 'parent_id')->orderBy('position');
     }
 
     public function assignee(): BelongsTo

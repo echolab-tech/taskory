@@ -14,17 +14,22 @@ import {
 } from "lucide-react";
 import api from "@/app/lib/api";
 import { motion } from "framer-motion";
+import TaskDetailSidebar from "@/components/task/TaskDetailSidebar";
 
 const DAY_WIDTH = 40; // width of one day in pixels
-const ROW_HEIGHT = 64; // height of each task row
 
 export default function GanttChartPage() {
-    const { orgId, projectId } = useParams();
+    const { projectId } = useParams();
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewDate, setViewDate] = useState(new Date());
     const [isDragging, setIsDragging] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    // Sidebar State
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [sidebarTab, setSidebarTab] = useState<'details' | 'comments' | 'subtasks'>('details');
 
     // Timeline range: display 30 days before and 60 days after viewDate
     const timelineDays = useMemo(() => {
@@ -143,6 +148,19 @@ export default function GanttChartPage() {
         return date.toLocaleString('default', { month: 'long', year: 'numeric' });
     };
 
+    const openTaskDetails = (task: any) => {
+        if (isDragging) return; // Prevent click when dragging
+        setSelectedTaskId(task.id);
+        setSidebarTab('details');
+        setIsSidebarOpen(true);
+    };
+
+    const handleCloseSidebar = () => {
+        setIsSidebarOpen(false);
+        setSelectedTaskId(null);
+        fetchTasks();
+    };
+
     if (loading) {
         return (
             <div className="flex h-[400px] w-full items-center justify-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
@@ -210,7 +228,11 @@ export default function GanttChartPage() {
                     </div>
                     <div className="flex flex-col divide-y divide-slate-50">
                         {tasks.map((task) => (
-                            <div key={task.id} className="h-[64px] flex items-center px-4 hover:bg-slate-50/50 transition-colors group">
+                            <div
+                                key={task.id}
+                                onClick={() => openTaskDetails(task)}
+                                className="h-[64px] flex items-center px-4 hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                            >
                                 <div className="flex flex-col min-w-0">
                                     <span className="text-xs font-bold text-slate-900 truncate">{task.title}</span>
                                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -281,6 +303,10 @@ export default function GanttChartPage() {
                                                     setIsDragging(false);
                                                     handleDragEnd(e, info, task);
                                                 }}
+                                                // Only open details if not dragging; checked in openTaskDetails but motion has its own behavior.
+                                                // We can use onTap instead of onClick to be safer with framer motion, 
+                                                // or just standard onClick which usually fires if drag didn't happen.
+                                                onClick={() => openTaskDetails(task)}
                                                 style={{
                                                     ...styles,
                                                     position: 'absolute',
@@ -296,6 +322,8 @@ export default function GanttChartPage() {
                                                     dragConstraints={{ left: 0, right: 0 }}
                                                     dragElastic={0}
                                                     onDragEnd={(e, info) => handleResize(task.id, 'start', info.offset.x)}
+                                                    // Stop propagation so we don't open details when resizing
+                                                    onPointerDown={(e) => e.stopPropagation()}
                                                     className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 rounded-l-xl opacity-0 group-hover/bar:opacity-100 transition-opacity z-20"
                                                 />
 
@@ -312,6 +340,7 @@ export default function GanttChartPage() {
                                                     dragConstraints={{ left: 0, right: 0 }}
                                                     dragElastic={0}
                                                     onDragEnd={(e, info) => handleResize(task.id, 'due', info.offset.x)}
+                                                    onPointerDown={(e) => e.stopPropagation()}
                                                     className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 rounded-r-xl opacity-0 group-hover/bar:opacity-100 transition-opacity z-20"
                                                 />
                                             </motion.div>
@@ -338,6 +367,15 @@ export default function GanttChartPage() {
                 </div>
                 <div className="text-[10px] font-black text-slate-300">Gantt View v1.0</div>
             </div>
+
+            <TaskDetailSidebar
+                taskId={selectedTaskId}
+                projectId={projectId as string}
+                isOpen={isSidebarOpen}
+                onClose={handleCloseSidebar}
+                onUpdate={fetchTasks}
+                initialTab={sidebarTab}
+            />
         </div>
     );
 }

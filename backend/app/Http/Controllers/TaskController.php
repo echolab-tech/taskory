@@ -32,6 +32,7 @@ class TaskController extends Controller
             'priority' => 'nullable|in:low,medium,high',
             'start_date' => 'nullable|date',
             'due_date' => 'nullable|date',
+            'parent_id' => 'nullable|exists:tasks,id',
         ]);
 
         $task = $this->taskService->createTask($request->all());
@@ -40,7 +41,7 @@ class TaskController extends Controller
 
     public function show(Task $task)
     {
-        return $this->success($task->load('activities', 'comments', 'attachments', 'assignee', 'status'));
+        return $this->success($task->load('activities', 'comments', 'attachments', 'assignee', 'status', 'subtasks.assignee', 'subtasks.status', 'parent'));
     }
 
     public function update(Request $request, Task $task)
@@ -53,6 +54,7 @@ class TaskController extends Controller
             'priority' => 'nullable|in:low,medium,high',
             'start_date' => 'nullable|date',
             'due_date' => 'nullable|date',
+            'parent_id' => 'nullable|exists:tasks,id',
         ]);
         $updatedTask = $this->taskService->updateTask($task, $request->all());
         return $this->success($updatedTask, 'Task updated successfully');
