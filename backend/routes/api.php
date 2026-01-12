@@ -23,14 +23,14 @@ Route::get('/email/verify/{id}/{hash}', function (Illuminate\Http\Request $reque
     $user = \App\Models\User::findOrFail($request->route('id'));
 
     if ($user->hasVerifiedEmail()) {
-        return redirect('http://localhost:3000/dashboard?verified=1');
+        return redirect(config('app.frontend_url') . '/dashboard?verified=1');
     }
 
     if ($user->markEmailAsVerified()) {
         event(new \Illuminate\Auth\Events\Verified($user));
     }
 
-    return redirect('http://localhost:3000/dashboard?verified=1');
+    return redirect(config('app.frontend_url') . '/dashboard?verified=1');
 })->name('verification.verify');
 
 // Protected routes
