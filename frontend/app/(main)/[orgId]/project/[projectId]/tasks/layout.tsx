@@ -2,8 +2,9 @@
 
 import React from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { List, BarChart3, Layout, Plus } from "lucide-react";
+import { List, BarChart3, Layout, Plus, Folder } from "lucide-react";
 import Link from "next/link";
+import TasksFilterBar from "@/components/task/TasksFilterBar";
 
 export default function ProjectTasksLayout({
     children,
@@ -18,6 +19,7 @@ export default function ProjectTasksLayout({
         { id: 'list', label: 'List', icon: <List size={16} />, href: `/${orgId}/project/${projectId}/tasks` },
         { id: 'board', label: 'Board', icon: <Layout size={16} />, href: `/${orgId}/project/${projectId}/tasks/board` },
         { id: 'gantt', label: 'Gantt', icon: <BarChart3 size={16} />, href: `/${orgId}/project/${projectId}/tasks/grant` },
+        { id: 'files', label: 'Files', icon: <Folder size={16} />, href: `/${orgId}/project/${projectId}/tasks/files` },
     ];
 
     const isActive = (href: string) => {
@@ -62,6 +64,8 @@ export default function ProjectTasksLayout({
                     );
                 })}
             </div>
+
+            <TasksFilterBar />
 
             <div>
                 {children}

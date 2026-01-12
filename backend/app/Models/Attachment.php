@@ -34,7 +34,7 @@ class Attachment extends Model
     /**
      * Get the user who uploaded the attachment.
      */
-    public function uploader(): BelongsTo
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }

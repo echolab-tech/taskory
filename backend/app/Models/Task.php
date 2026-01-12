@@ -21,6 +21,7 @@ class Task extends Model
         'assignee_id',
         'priority',
         'estimated_hours',
+        'actual_hours',
         'start_date',
         'due_date',
         'position',

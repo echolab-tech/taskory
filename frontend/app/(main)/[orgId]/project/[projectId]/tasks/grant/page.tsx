@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
     ChevronLeft,
     ChevronRight,
@@ -48,16 +48,21 @@ export default function GanttChartPage() {
     const startDate = timelineDays[0];
     const endDate = timelineDays[timelineDays.length - 1];
 
+    const searchParams = useSearchParams();
+
     useEffect(() => {
         if (projectId) {
             fetchTasks();
         }
-    }, [projectId]);
+    }, [projectId, searchParams]);
 
     const fetchTasks = async () => {
         try {
             setLoading(true);
-            const res = await api.get(`/tasks?project_id=${projectId}`);
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('project_id', projectId as string);
+
+            const res = await api.get(`/tasks?${params.toString()}`);
             setTasks(res.data.data || []);
         } catch (err) {
             console.error("Error fetching tasks for Gantt", err);

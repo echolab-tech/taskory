@@ -22,7 +22,8 @@ import {
     Save,
     DownloadCloud,
     AtSign,
-    Maximize2
+    Maximize2,
+    Clock
 } from "lucide-react";
 import api from "@/app/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -64,7 +65,9 @@ export default function TaskDetailSidebar({
         milestone_id: "",
         due_date: "",
         start_date: "",
-        priority: "medium"
+        priority: "medium",
+        estimated_hours: "",
+        actual_hours: ""
     });
 
     const [comments, setComments] = useState<any[]>([]);
@@ -168,7 +171,9 @@ export default function TaskDetailSidebar({
                 milestone_id: task.milestone_id?.toString() || "",
                 due_date: task.due_date || "",
                 start_date: task.start_date || "",
-                priority: task.priority || "medium"
+                priority: task.priority || "medium",
+                estimated_hours: task.estimated_hours?.toString() || "",
+                actual_hours: task.actual_hours?.toString() || ""
             });
         } catch (err) {
             console.error("Error fetching task details", err);
@@ -196,7 +201,9 @@ export default function TaskDetailSidebar({
             milestone_id: "",
             due_date: "",
             start_date: "",
-            priority: "medium"
+            priority: "medium",
+            estimated_hours: "",
+            actual_hours: ""
         });
         setComments([]);
         setAttachments([]);
@@ -461,6 +468,14 @@ export default function TaskDetailSidebar({
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><CalendarIcon size={12} /> Due Date</label>
                                         <input type="date" className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700" value={formData.due_date} onChange={(e) => updateField('due_date', e.target.value)} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Clock size={12} /> Estimated Hours</label>
+                                        <input type="number" step="0.5" min="0" className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700" value={formData.estimated_hours} onChange={(e) => updateField('estimated_hours', e.target.value)} placeholder="0" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Clock size={12} /> Actual Hours</label>
+                                        <input type="number" step="0.5" min="0" className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-bold text-slate-700" value={formData.actual_hours} onChange={(e) => updateField('actual_hours', e.target.value)} placeholder="0" />
                                     </div>
                                 </div>
 

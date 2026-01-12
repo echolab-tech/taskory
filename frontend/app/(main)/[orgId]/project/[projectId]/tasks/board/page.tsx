@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
     Plus,
     MoreHorizontal,
@@ -26,17 +26,23 @@ export default function KanbanBoardPage() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [sidebarTab, setSidebarTab] = useState<'details' | 'comments' | 'subtasks'>('details');
 
+    const searchParams = useSearchParams();
+
     useEffect(() => {
         if (projectId) {
             fetchData();
         }
-    }, [projectId]);
+    }, [projectId, searchParams]);
 
     const fetchData = async () => {
         try {
             setLoading(true);
+
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('project_id', projectId as string);
+
             const [tasksRes, statusRes] = await Promise.all([
-                api.get(`/tasks?project_id=${projectId}`),
+                api.get(`/tasks?${params.toString()}`),
                 api.get(`/task-statuses?project_id=${projectId}`)
             ]);
             setTasks(tasksRes.data.data || []);

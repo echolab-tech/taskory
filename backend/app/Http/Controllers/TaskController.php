@@ -33,6 +33,8 @@ class TaskController extends Controller
             'start_date' => 'nullable|date',
             'due_date' => 'nullable|date',
             'parent_id' => 'nullable|exists:tasks,id',
+            'estimated_hours' => 'nullable|numeric|min:0',
+            'actual_hours' => 'nullable|numeric|min:0',
         ]);
 
         $task = $this->taskService->createTask($request->all());
@@ -55,6 +57,8 @@ class TaskController extends Controller
             'start_date' => 'nullable|date',
             'due_date' => 'nullable|date',
             'parent_id' => 'nullable|exists:tasks,id',
+            'estimated_hours' => 'nullable|numeric|min:0',
+            'actual_hours' => 'nullable|numeric|min:0',
         ]);
         $updatedTask = $this->taskService->updateTask($task, $request->all());
         return $this->success($updatedTask, 'Task updated successfully');

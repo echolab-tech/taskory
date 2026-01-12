@@ -19,10 +19,39 @@ class TaskService
             $query->where('assignee_id', $filters['assignee_id']);
         }
 
+        if (isset($filters['assignee_ids']) && is_array($filters['assignee_ids'])) {
+             $query->whereIn('assignee_id', $filters['assignee_ids']);
+        }
+
+        if (isset($filters['status_ids']) && is_array($filters['status_ids'])) {
+            $query->whereIn('status_id', $filters['status_ids']);
+        }
+
+        if (isset($filters['date_created_start'])) {
+            $query->whereDate('created_at', '>=', $filters['date_created_start']);
+        }
+        if (isset($filters['date_created_end'])) {
+            $query->whereDate('created_at', '<=', $filters['date_created_end']);
+        }
+
+        if (isset($filters['date_updated_start'])) {
+            $query->whereDate('updated_at', '>=', $filters['date_updated_start']);
+        }
+        if (isset($filters['date_updated_end'])) {
+            $query->whereDate('updated_at', '<=', $filters['date_updated_end']);
+        }
+
+        if (isset($filters['due_date_start'])) {
+            $query->whereDate('due_date', '>=', $filters['due_date_start']);
+        }
+        if (isset($filters['due_date_end'])) {
+            $query->whereDate('due_date', '<=', $filters['due_date_end']);
+        }
+
         // Only show top-level tasks in the main list
         $query->whereNull('parent_id');
 
-        return $query->with('assignee', 'status', 'milestone', 'creator')
+        return $query->with('assignee', 'status', 'milestone', 'creator', 'subtasks.assignee', 'subtasks.status', 'subtasks.creator')
                      ->withCount(['comments', 'subtasks'])
                      ->orderBy('position', 'asc')
                      ->get();
@@ -110,6 +139,22 @@ class TaskService
                 'field' => 'Parent Task',
                 'old' => $original->parent_id,
                 'new' => $task->parent_id
+            ];
+        }
+
+        if ($task->isDirty('estimated_hours')) {
+             $changes[] = [
+                'field' => 'Estimated Hours',
+                'old' => $original->estimated_hours,
+                'new' => $task->estimated_hours
+            ];
+        }
+
+        if ($task->isDirty('actual_hours')) {
+             $changes[] = [
+                'field' => 'Actual Hours',
+                'old' => $original->actual_hours,
+                'new' => $task->actual_hours
             ];
         }
 
@@ -205,11 +250,11 @@ class TaskService
         });
 
         // 3. Attachments
-        $attachments = $task->attachments()->with('uploader')->get()->map(function ($att) {
+        $attachments = $task->attachments()->with('user')->get()->map(function ($att) {
             return [
                 'id' => 'f_' . $att->id,
                 'type' => 'file',
-                'user' => $att->uploader,
+                'user' => $att->user,
                 'content' => "Uploaded file: " . $att->file_name,
                 'created_at' => $att->created_at,
                 'file_url' => asset('storage/' . $att->file_path),

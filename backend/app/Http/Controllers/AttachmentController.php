@@ -36,10 +36,18 @@ class AttachmentController extends Controller
 
     public function download(Attachment $attachment)
     {
-        if (!Storage::disk('public')->exists($attachment->file_path)) {
-            return $this->error('File not found', 404);
+        try {
+            $path = Storage::disk('public')->path($attachment->file_path);
+            
+            if (!file_exists($path)) {
+                return $this->error('File not found at path: ' . $path, 404);
+            }
+
+            return response()->download($path, $attachment->file_name);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Download failed: ' . $e->getMessage());
+            return $this->error('Download error: ' . $e->getMessage(), 500);
         }
-        return Storage::disk('public')->download($attachment->file_path, $attachment->file_name);
     }
 
     public function destroy(Attachment $attachment)
