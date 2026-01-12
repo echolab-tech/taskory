@@ -19,6 +19,7 @@ export default function ProjectMyTaskPage() {
     }, [user, projectId]);
 
     const fetchMyTasks = async () => {
+        if (!user) return;
         try {
             const res = await api.get(`/tasks?project_id=${projectId}&assignee_id=${user.id}`);
             setTasks(res.data.data || []);

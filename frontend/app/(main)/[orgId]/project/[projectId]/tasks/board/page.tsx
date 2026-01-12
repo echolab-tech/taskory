@@ -128,7 +128,7 @@ export default function KanbanBoardPage() {
                             <motion.div
                                 key={task.id}
                                 draggable
-                                onDragStart={(e) => e.dataTransfer.setData("taskId", task.id.toString())}
+                                onDragStart={(e: any) => e.dataTransfer.setData("taskId", task.id.toString())}
                                 layoutId={task.id.toString()}
                                 onClick={() => openTaskDetails(task)}
                                 className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-grab active:cursor-grabbing group ring-offset-2 focus:ring-2 focus:ring-blue-500"
